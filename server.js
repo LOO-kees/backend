@@ -12,7 +12,7 @@ const bcrypt     = require('bcrypt');       // bcrypt 해시 암호화
 const jwt        = require('jsonwebtoken'); // JWT 생성/검증
 const SECRET_KEY = 'test';                  // JWT 서명용 비밀 키 (예시)
 
-// CORS 및 JSON 파싱
+// 모든 도메인에서의 요청 허용 및 JSON 파싱
 app.use(cors());
 app.use(express.json());
 
@@ -23,7 +23,6 @@ app.use(express.json());
  */
 const fs   = require('fs');
 const path = require('path');
-
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -35,7 +34,7 @@ app.use('/uploads', express.static(uploadDir));
  * Multer 설정 (상품 이미지 업로드)
  * ======================================
  */
-const multer  = require('multer');
+const multer = require('multer');
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename:    (req, file, cb) => {
@@ -46,12 +45,12 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage }).fields([
   { name: 'image_main', maxCount: 1 },
-  { name: 'image_1',     maxCount: 1 },
-  { name: 'image_2',     maxCount: 1 },
-  { name: 'image_3',     maxCount: 1 },
-  { name: 'image_4',     maxCount: 1 },
-  { name: 'image_5',     maxCount: 1 },
-  { name: 'image_6',     maxCount: 1 }
+  { name: 'image_1',      maxCount: 1 },
+  { name: 'image_2',      maxCount: 1 },
+  { name: 'image_3',      maxCount: 1 },
+  { name: 'image_4',      maxCount: 1 },
+  { name: 'image_5',      maxCount: 1 },
+  { name: 'image_6',      maxCount: 1 },
 ]);
 
 /**
@@ -77,7 +76,7 @@ connectionKdt.connect(err => {
  *    - GreenMarket 전용
  * ======================================
  */
-// 2-1. Ginipet 전용 (ginipet_users 테이블)
+// Ginipet 전용 (ginipet_users 테이블)
 const connectionGinipet = mysql.createConnection({
   host: 'database',
   user: 'root',
@@ -89,7 +88,7 @@ connectionGinipet.connect(err => {
   else     console.log('MYSQL(ginipet) 연결 성공');
 });
 
-// 2-2. GreenMarket 전용 (green_users, green_products, green_cart)
+// GreenMarket 전용 (green_users, green_products, green_cart)
 const connectionGM = mysql.createConnection({
   host: 'database',
   user: 'root',
@@ -103,7 +102,7 @@ connectionGM.connect(err => {
 
 /**
  * ======================================
- * 3. 기존 kdt 프로젝트용 라우트
+ * 3. 기존 KDT 프로젝트용 라우트
  * ======================================
  */
 // 3-1. 로그인 (users 테이블)
@@ -185,10 +184,7 @@ app.get('/goods', (req, res) => {
   connectionKdt.query(
     'SELECT * FROM goods ORDER BY g_code DESC',
     (err, results) => {
-      if (err) {
-        console.log('goods 조회 오류:', err);
-        return res.status(500).json({ error: 'DB쿼리 오류' });
-      }
+      if (err) return res.status(500).json({ error: 'DB쿼리 오류' });
       res.json(results);
     }
   );
@@ -196,15 +192,11 @@ app.get('/goods', (req, res) => {
 
 // 3-6. 상품삭제 (DELETE /goods/:g_code)
 app.delete('/goods/:g_code', (req, res) => {
-  const g_code = req.params.g_code;
   connectionKdt.query(
     'DELETE FROM goods WHERE g_code = ?',
-    [g_code],
+    [req.params.g_code],
     err => {
-      if (err) {
-        console.log('goods 삭제 오류:', err);
-        return res.status(500).json({ error: '상품 삭제 실패' });
-      }
+      if (err) return res.status(500).json({ error: '상품 삭제 실패' });
       res.json({ success: true });
     }
   );
@@ -212,16 +204,12 @@ app.delete('/goods/:g_code', (req, res) => {
 
 // 3-7. 상품수정 (UPDATE /goods/update/:g_code)
 app.put('/goods/update/:g_code', (req, res) => {
-  const g_code = req.params.g_code;
   const { g_name, g_cost } = req.body;
   connectionKdt.query(
     'UPDATE goods SET g_name = ?, g_cost = ? WHERE g_code = ?',
-    [g_name, g_cost, g_code],
+    [g_name, g_cost, req.params.g_code],
     err => {
-      if (err) {
-        console.log('goods 수정 오류:', err);
-        return res.status(500).json({ error: '상품 수정 실패'});
-      }
+      if (err) return res.status(500).json({ error: '상품 수정 실패' });
       res.json({ success: true });
     }
   );
@@ -229,15 +217,11 @@ app.put('/goods/update/:g_code', (req, res) => {
 
 // 3-8. 특정상품 조회 (GET /goods/:g_code)
 app.get('/goods/:g_code', (req, res) => {
-  const g_code = req.params.g_code;
   connectionKdt.query(
     'SELECT * FROM goods WHERE g_code = ?',
-    [g_code],
+    [req.params.g_code],
     (err, results) => {
-      if (err) {
-        console.log('goods 상세조회 오류:', err);
-        return res.status(500).json({ error:'상품 조회 실패' });
-      }
+      if (err) return res.status(500).json({ error: '상품 조회 실패' });
       if (!results.length) return res.status(404).json({ error: '해당 상품이 없습니다.' });
       res.json(results[0]);
     }
@@ -247,17 +231,147 @@ app.get('/goods/:g_code', (req, res) => {
 // 3-9. 상품 등록 (POST /goods)
 app.post('/goods', (req, res) => {
   const { g_name, g_cost } = req.body;
-  if (!g_name || !g_cost)
-    return res.status(400).json({ error:'필수 항목이 누락되었습니다.' });
+  if (!g_name || !g_cost) return res.status(400).json({ error: '필수 항목이 누락되었습니다.' });
   connectionKdt.query(
     'INSERT INTO goods (g_name, g_cost) VALUES (?, ?)',
     [g_name, g_cost],
     (err, result) => {
-      if (err) {
-        console.log('goods 등록 오류:', err);
-        return res.status(500).json({ error:'상품 등록 실패' });
-      }
-      res.json({success:true, insertId: result.insertId});
+      if (err) return res.status(500).json({ error: '상품 등록 실패' });
+      res.json({ success: true, insertId: result.insertId });
+    }
+  );
+});
+
+// 3-10. 도서목록 조회 (book_store)
+app.get('/books', (req, res) => {
+  connectionKdt.query('SELECT * FROM book_store', (err, results) => {
+    if (err) return res.status(500).json({ error: 'DB쿼리 오류' });
+    res.json(results);
+  });
+});
+
+// 3-11. 도서등록 (POST /books)
+app.post('/books', (req, res) => {
+  const { name, area1, area2, area3, BOOK_CNT, owner_nm, tel_num } = req.body;
+  if (!name || !BOOK_CNT) return res.status(400).json({ error: '필수 항목이 누락되었습니다.' });
+  connectionKdt.query(
+    'INSERT INTO book_store (name, area1, area2, area3, BOOK_CNT, owner_nm, tel_num) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [name, area1, area2, area3, BOOK_CNT, owner_nm, tel_num],
+    (err, result) => {
+      if (err) return res.status(500).json({ error: '도서 등록 실패' });
+      res.json({ success: true, insertId: result.insertId });
+    }
+  );
+});
+
+// 3-12. 특정 도서 조회 (GET /books/:num)
+app.get('/books/:num', (req, res) => {
+  connectionKdt.query(
+    'SELECT * FROM book_store WHERE num = ?',
+    [req.params.num],
+    (err, results) => {
+      if (err) return res.status(500).json({ error: '도서 조회 실패' });
+      if (!results.length) return res.status(404).json({ error: '해당 도서가 없습니다.' });
+      res.json(results[0]);
+    }
+  );
+});
+
+// 3-13. 도서삭제 (DELETE /books/:num)
+app.delete('/books/:num', (req, res) => {
+  connectionKdt.query(
+    'DELETE FROM book_store WHERE num = ?',
+    [req.params.num],
+    err => {
+      if (err) return res.status(500).json({ error: '도서 삭제 실패' });
+      res.json({ success: true });
+    }
+  );
+});
+
+// 3-14. 도서수정 (PUT /books/update/:num)
+app.put('/books/update/:num', (req, res) => {
+  const { name, area1, area2, area3, BOOK_CNT, owner_nm, tel_num } = req.body;
+  connectionKdt.query(
+    'UPDATE book_store SET name = ?, area1 = ?, area2 = ?, area3 = ?, BOOK_CNT = ?, owner_nm = ?, tel_num = ? WHERE num = ?',
+    [name, area1, area2, area3, BOOK_CNT, owner_nm, tel_num, req.params.num],
+    err => {
+      if (err) return res.status(500).json({ error: '도서 수정 실패' });
+      res.json({ success: true });
+    }
+  );
+});
+
+// 3-15. 과일목록 조회 (fruit)
+app.get('/fruits', (req, res) => {
+  connectionKdt.query('SELECT * FROM fruit ORDER BY num DESC', (err, results) => {
+    if (err) return res.status(500).json({ error: 'DB쿼리 오류' });
+    res.json(results);
+  });
+});
+
+// 3-16. 과일등록 (POST /fruits)
+app.post('/fruits', (req, res) => {
+  const { name, price, color, country } = req.body;
+  if (!name || !price || !color || !country) return res.status(400).json({ error: '필수 항목이 누락되었습니다.' });
+  connectionKdt.query(
+    'INSERT INTO fruit (name, price, color, country) VALUES (?, ?, ?, ?)',
+    [name, price, color, country],
+    (err, result) => {
+      if (err) return res.status(500).json({ error: '상품 등록 실패' });
+      res.json({ success: true, insertId: result.insertId });
+    }
+  );
+});
+
+// 3-17. 과일상세 (GET /fruits/:num)
+app.get('/fruits/:num', (req, res) => {
+  connectionKdt.query(
+    'SELECT * FROM fruit WHERE num = ?',
+    [req.params.num],
+    (err, results) => {
+      if (err) return res.status(500).json({ error: '과일 조회 실패' });
+      if (!results.length) return res.status(404).json({ error: '해당 과일이 없습니다.' });
+      res.json(results[0]);
+    }
+  );
+});
+
+// 3-18. 과일삭제 (DELETE /fruits/:num)
+app.delete('/fruits/:num', (req, res) => {
+  connectionKdt.query(
+    'DELETE FROM fruit WHERE num = ?',
+    [req.params.num],
+    err => {
+      if (err) return res.status(500).json({ error: '과일 삭제 실패' });
+      res.json({ success: true });
+    }
+  );
+});
+
+// 3-19. 과일수정 (PUT /fruits/update/:num)
+app.put('/fruits/update/:num', (req, res) => {
+  const { name, price, color, country } = req.body;
+  connectionKdt.query(
+    'UPDATE fruit SET name = ?, price = ?, color = ?, country = ? WHERE num = ?',
+    [name, price, color, country, req.params.num],
+    err => {
+      if (err) return res.status(500).json({ error: '과일 수정 실패' });
+      res.json({ success: true });
+    }
+  );
+});
+
+// 3-20. 질문등록 (POST /question)
+app.post('/question', (req, res) => {
+  const { name, tel, email, txtbox } = req.body;
+  if (!name || !tel || !email || !txtbox) return res.status(400).json({ error: '필수 항목이 누락되었습니다.' });
+  connectionKdt.query(
+    'INSERT INTO question (name, tel, email, txtbox) VALUES (?, ?, ?, ?)',
+    [name, tel, email, txtbox],
+    err => {
+      if (err) return res.status(500).json({ error: '데이터 입력 오류' });
+      res.send('질문 등록 완료');
     }
   );
 });
@@ -275,11 +389,11 @@ app.post('/ginipet/register', async (req, res) => {
     'INSERT INTO ginipet_users (username, password, tel, email) VALUES (?, ?, ?, ?)',
     [username, hash, tel, email],
     err => {
-      if(err){
-        if(err.code==='ER_DUP_ENTRY') return res.status(400).json({error:'이미 존재하는 아이디입니다.'});
-        return res.status(500).json({error:'회원가입 실패'});
+      if (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: '이미 존재하는 아이디입니다.' });
+        return res.status(500).json({ error: '회원가입 실패' });
       }
-      res.json({success:true});
+      res.json({ success: true });
     }
   );
 });
@@ -291,13 +405,12 @@ app.post('/ginipet/login', (req, res) => {
     'SELECT * FROM ginipet_users WHERE username = ?',
     [username],
     async (err, results) => {
-      if(err || !results.length)
-        return res.status(401).json({error:'아이디 또는 비밀번호가 틀렸습니다.'});
+      if (err || !results.length) return res.status(401).json({ error: '아이디 또는 비밀번호가 틀렸습니다.' });
       const user = results[0];
       const match = await bcrypt.compare(password, user.password);
-      if(!match) return res.status(401).json({error:'아이디 또는 비밀번호가 틀립니다.'});
-      const token = jwt.sign({id:user.id, username:user.username}, SECRET_KEY, {expiresIn:'1h'});
-      res.json({token});
+      if (!match) return res.status(401).json({ error: '아이디 또는 비밀번호가 틀립니다.' });
+      const token = jwt.sign({ id: user.id, username: user.username }, SECRET_KEY, { expiresIn: '1h' });
+      res.json({ token });
     }
   );
 });
@@ -315,10 +428,10 @@ app.get('/ginipet/join', (req, res) => {
 // JWT 인증 미들웨어
 function authenticateToken(req, res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ message:'토큰 없음' });
+  const token      = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ message: '토큰 없음' });
   jwt.verify(token, SECRET_KEY, (err, user) => {
-    if (err) return res.status(401).json({ message:'유효하지 않은 토큰입니다.' });
+    if (err) return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
     req.user = user;
     next();
   });
@@ -329,17 +442,17 @@ app.post('/api/register', async (req, res) => {
   const { userid, username, password, phone, email, region } = req.body;
   try {
     const hash = await bcrypt.hash(password, 10);
-    const sql  = `INSERT INTO green_users (userid, username, password, phone, email, region) VALUES (?, ?, ?, ?, ?, ?)`;
+    const sql  = 'INSERT INTO green_users (userid, username, password, phone, email, region) VALUES (?, ?, ?, ?, ?, ?)';
     connectionGM.query(sql, [userid, username, hash, phone, email, region], err => {
       if (err) {
         if (err.code === 'ER_DUP_ENTRY')
-          return res.status(400).json({ error:'이미 존재하는 아이디 또는 이메일입니다.' });
-        return res.status(500).json({ error:'회원가입 실패' });
+          return res.status(400).json({ error: '이미 존재하는 아이디 또는 이메일입니다.' });
+        return res.status(500).json({ error: '회원가입 실패' });
       }
       res.json({ success: true });
     });
   } catch {
-    res.status(500).json({ error:'서버 오류' });
+    res.status(500).json({ error: '서버 오류' });
   }
 });
 
@@ -347,45 +460,61 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', (req, res) => {
   const { userid, password } = req.body;
   connectionGM.query('SELECT * FROM green_users WHERE userid = ?', [userid], async (err, results) => {
-    if (err) return res.status(500).json({ error:'DB 오류' });
-    if (!results.length) return res.status(400).json({ error:'아이디 또는 비밀번호가 잘못되었습니다.' });
+    if (err) return res.status(500).json({ error: 'DB 오류' });
+    if (!results.length) return res.status(400).json({ error: '아이디 또는 비밀번호가 잘못되었습니다.' });
     const user = results[0];
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ error:'아이디 또는 비밀번호가 잘못되었습니다.' });
+    if (!match) return res.status(401).json({ error: '아이디 또는 비밀번호가 잘못되었습니다.' });
     const now = new Date();
     connectionGM.query('UPDATE green_users SET last_login = ? WHERE id = ?', [now, user.id]);
-    const token = jwt.sign({ id:user.id, userid:user.userid }, SECRET_KEY, { expiresIn:'1h' });
-    res.json({ success:true, token, last_login: now });
+    const token = jwt.sign({ id: user.id, userid: user.userid }, SECRET_KEY, { expiresIn: '1h' });
+    res.json({ success: true, token, last_login: now });
   });
 });
 
 // 5-3. 상품 등록 (green_products + 이미지)
 app.post('/api/products', authenticateToken, upload, (req, res) => {
   const b   = req.body;
-  const img = key => req.files?.[key]?.[0]?.filename || null;
+  const img = key => req.files?.[key]?.[0]?.filename ?? null;
   const params = [
     req.user.id,
     b.title, b.brand, b.kind, b.condition,
     b.price, b.trade_type, b.region, b.description,
     b.shipping_fee || 0,
-    img('image_main'), img('image_1'), img('image_2'), img('image_3'), img('image_4'), img('image_5'), img('image_6')
+    img('image_main'), img('image_1'), img('image_2'),
+    img('image_3'), img('image_4'), img('image_5'), img('image_6')
   ];
-  const sql = `INSERT INTO green_products (owner_id, title, brand, kind, \\`condition\\`, price, trade_type, region, description, shipping_fee, image_main, image_1, image_2, image_3, image_4, image_5, image_6) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-  connectionGM.query(sql, params, (err, result) => {  
-    if (err) { console.error('상품 등록 오류:', err); return res.status(500).json({ error:'상품 등록 실패' }); }
-    res.json({ success:true, id: result.insertId });
+  const sql = 
+    'INSERT INTO green_products ' +
+    '(owner_id, title, brand, kind, `condition`, price, ' +
+    'trade_type, region, description, shipping_fee, ' +
+    'image_main, image_1, image_2, image_3, image_4, image_5, image_6) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  connectionGM.query(sql, params, (err, result) => {
+    if (err) {
+      console.error('상품 등록 오류:', err);
+      return res.status(500).json({ error: '상품 등록 실패' });
+    }
+    res.json({ success: true, id: result.insertId });
   });
 });
 
 // 5-4. 상품 목록 조회
 app.get('/api/products', (req, res) => {
   connectionGM.query('SELECT * FROM green_products ORDER BY id DESC', (err, rows) => {
-    if (err) return res.status(500).json({ error:'조회 실패' });
+    if (err) return res.status(500).json({ error: '조회 실패' });
     const products = rows.map(r => ({
-      id: r.id, title: r.title, brand: r.brand, kind: r.kind,
-      condition: r.condition, price: r.price, trade_type: r.trade_type,
-      region: r.region, description: r.description, datetime: r.datetime,
-      images: [r.image_main, r.image_1, r.image_2, r.image_3, r.image_4, r.image_5, r.image_6].filter(v=>v)
+      id: r.id,
+      title: r.title,
+      brand: r.brand,
+      kind: r.kind,
+      condition: r.condition,
+      price: r.price,
+      trade_type: r.trade_type,
+      region: r.region,
+      description: r.description,
+      datetime: r.datetime,
+      images: [r.image_main, r.image_1, r.image_2, r.image_3, r.image_4, r.image_5, r.image_6].filter(v => v)
     }));
     res.json(products);
   });
@@ -393,44 +522,67 @@ app.get('/api/products', (req, res) => {
 
 // 5-5. 상품 상세 조회
 app.get('/api/products/:id', (req, res) => {
-  const sql = `SELECT p.*, u.username AS seller_name, (SELECT COUNT(*) FROM green_products WHERE owner_id = p.owner_id) AS seller_product_count FROM green_products p JOIN green_users u ON p.owner_id = u.id WHERE p.id = ?`;
+  const sql = 
+    'SELECT p.*, u.username AS seller_name, ' +
+    '(SELECT COUNT(*) FROM green_products WHERE owner_id = p.owner_id) AS seller_product_count ' +
+    'FROM green_products p ' +
+    'JOIN green_users u ON p.owner_id = u.id ' +
+    'WHERE p.id = ?';
   connectionGM.query(sql, [req.params.id], (err, result) => {
-    if (err) return res.status(500).json({ error:'DB 오류' });
-    if (!result.length) return res.status(404).json({ error:'상품 없음' });
+    if (err) return res.status(500).json({ error: 'DB 오류' });
+    if (!result.length) return res.status(404).json({ error: '상품 없음' });
     res.json(result[0]);
   });
 });
 
 // 5-6. 장바구니 조회
 app.get('/api/cart', authenticateToken, (req, res) => {
-  const sql = `SELECT cart_id AS id, product_id, title, brand, kind, \\`condition\\`, price, shipping_fee, trade_type, region, image_main, added_at FROM green_cart WHERE user_id = ?`;
-  connectionGM.query(sql, [req.user.id], (err, rows) => { if (err) return res.status(500).json({ error:'DB 오류' }); res.json(rows); });
+  const sql = 
+    'SELECT cart_id AS id, product_id, title, brand, kind, `condition`, price, shipping_fee, trade_type, region, image_main, added_at ' +
+    'FROM green_cart WHERE user_id = ?';
+  connectionGM.query(sql, [req.user.id], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'DB 오류' });
+    res.json(rows);
+  });
 });
 
 // 5-7. 장바구니 삭제
 app.delete('/api/cart', authenticateToken, (req, res) => {
   const ids = req.body.ids;
-  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error:'삭제할 ID 필요' });
-  const placeholders = ids.map(()=>'?').join(',');
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: '삭제할 ID 필요' });
+  const placeholders = ids.map(() => '?').join(',');
   const sql = `DELETE FROM green_cart WHERE user_id = ? AND cart_id IN (${placeholders})`;
-  connectionGM.query(sql, [req.user.id, ...ids], (err, result) => { if (err) return res.status(500).json({ error:'삭제 실패' }); res.json({ success:true, affectedRows: result.affectedRows }); });
+  connectionGM.query(sql, [req.user.id, ...ids], (err, result) => {
+    if (err) return res.status(500).json({ error: '삭제 실패' });
+    res.json({ success: true, affectedRows: result.affectedRows });
+  });
 });
 
 // 5-8. 장바구니 추가
 app.post('/api/cart', authenticateToken, (req, res) => {
   const { product_id } = req.body;
-  const check = 'SELECT * FROM green_cart WHERE user_id = ? AND product_id = ?';
-  connectionGM.query(check, [req.user.id, product_id], (err, chk) => {
-    if (err) return res.status(500).json({ error:'DB 오류' });
-    if (chk.length) return res.status(400).json({ error:'이미 장바구니에 있습니다.' });
-    const prodSql = 'SELECT title, brand, kind, `condition`, price, trade_type, region, image_main, shipping_fee FROM green_products WHERE id = ?';
+  const checkSql = 'SELECT * FROM green_cart WHERE user_id = ? AND product_id = ?';
+  connectionGM.query(checkSql, [req.user.id, product_id], (err, chk) => {
+    if (err) return res.status(500).json({ error: 'DB 오류' });
+    if (chk.length) return res.status(400).json({ error: '이미 장바구니에 있습니다.' });
+
+    const prodSql = 
+      'SELECT title, brand, kind, `condition`, price, trade_type, region, image_main, shipping_fee ' +
+      'FROM green_products WHERE id = ?';
     connectionGM.query(prodSql, [product_id], (err, pres) => {
-      if (err) return res.status(500).json({ error:'상품 조회 오류' });
-      if (!pres.length) return res.status(404).json({ error:'상품 없음' });
+      if (err) return res.status(500).json({ error: '상품 조회 오류' });
+      if (!pres.length) return res.status(404).json({ error: '상품 없음' });
       const p = pres[0];
-      const insert = 'INSERT INTO green_cart (user_id, product_id, title, brand, kind, `condition`, shipping_fee, price, trade_type, region, image_main, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())';
-      const params2 = [req.user.id, product_id, p.title, p.brand, p.kind, p.condition, p.shipping_fee, p.price, p.trade_type, p.region, p.image_main];
-      connectionGM.query(insert, params2, err => { if (err) return res.status(500).json({ error:'장바구니 추가 실패' }); res.json({ message:'장바구니에 상품이 추가되었습니다.' }); });
+
+      const insertSql = 
+        'INSERT INTO green_cart (user_id, product_id, title, brand, kind, `condition`, shipping_fee, price, trade_type, region, image_main, added_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())';
+      const params = [req.user.id, product_id, p.title, p.brand, p.kind, p.condition, p.shipping_fee, p.price, p.trade_type, p.region, p.image_main];
+
+      connectionGM.query(insertSql, params, err => {
+        if (err) return res.status(500).json({ error: '장바구니 추가 실패' });
+        res.json({ message: '장바구니에 상품이 추가되었습니다.' });
+      });
     });
   });
 });
