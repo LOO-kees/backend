@@ -1,43 +1,32 @@
-/**
- * ================================
- *  공통 설정: Express + 미들웨어
- * ================================
- */
-const express = require('express');         // express 기본 라우팅
-const app = express();                      // express 인스턴스 생성
-const port = 9070;                          // 사용할 포트 (kdt/지니펫 공통)
-const cors = require('cors');               // CORS 허용 미들웨어
-const mysql = require('mysql');             // MySQL 연결 라이브러리
-const bcrypt = require('bcrypt');           // bcrypt 해시 암호화
-const jwt = require('jsonwebtoken');        // JWT 생성/검증
-const SECRET_KEY = 'test';                  // JWT 서명용 비밀 키 (예시)
+// 서버 최상단에 추가: .env 읽기
+require('dotenv').config();
 
-app.use(cors());                            // 모든 도메인/포트에서 요청 허용
-app.use(express.json());                    // JSON 요청 본문(body) 파싱
+const express     = require('express');
+const cors        = require('cors');
+const mysql       = require('mysql');
+const bcrypt      = require('bcrypt');
+const jwt         = require('jsonwebtoken');
+const fs          = require('fs');
+const path        = require('path');
+const multer      = require('multer');
 
-/**
- * ======================================
- * uploads 폴더 자동 생성 & 정적 제공
- * ======================================
- */
-const fs = require('fs');
-const path = require('path');
+const app   = express();
+const port  = process.env.PORT || 9070;
+const SECRET = process.env.SECRET_KEY || 'test';
 
-// 1) uploads 디렉터리 없으면 생성
+// ──────────────────────────────────────────────
+// 미들웨어
+app.use(cors());
+app.use(express.json());
+
+// uploads 폴더 자동 생성 & 정적 제공
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-
-// 2) 클라이언트에서 /uploads/파일명 으로 접근 가능하도록 설정
 app.use('/uploads', express.static(uploadDir));
 
-/**
- * ======================================
- * Multer 설정 (상품 이미지 업로드)
- * ======================================
- */
-const multer = require('multer');
+// Multer 설정
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename:    (req, file, cb) => {
@@ -56,49 +45,39 @@ const upload = multer({ storage }).fields([
   { name: 'image_6',      maxCount: 1 },
 ]);
 
-/**
- * ======================================
- * 1. MySQL 연결 정보 (kdt 데이터베이스)
- * ======================================
- */
+// ──────────────────────────────────────────────
+// 1) KDT DB 연결
 const connectionKdt = mysql.createConnection({
-  host: 'database',    // CloudType MySQL 서비스 이름
-  user: 'root',
-  password: '1234',
-  database: 'kdt'
+  host:     process.env.KDT_DB_HOST     || 'database',
+  user:     process.env.KDT_DB_USER     || 'root',
+  password: process.env.KDT_DB_PASSWORD || '1234',
+  database: process.env.KDT_DB_NAME     || 'kdt',
 });
 connectionKdt.connect(err => {
   if (err) {
-    console.log('MYSQL(kdt) 연결 실패 : ', err);
-    return;
+    console.error('MYSQL(kdt) 연결 실패:', err);
+  } else {
+    console.log('MYSQL(kdt) 연결 성공');
   }
-  console.log('MYSQL(kdt) 연결 성공');
 });
 
-/**
- * ======================================
- * 2. MySQL 연결 정보 (greenmarket 데이터베이스)
- * ======================================
- */
+// 2) GreenMarket DB 연결
 const connectionGini = mysql.createConnection({
-  host: 'database',
-  user: 'root',
-  password: '1234',
-  database: 'greenmarket'
+  host:     process.env.GINI_DB_HOST     || 'database',
+  user:     process.env.GINI_DB_USER     || 'root',
+  password: process.env.GINI_DB_PASSWORD || '1234',
+  database: process.env.GINI_DB_NAME     || 'greenmarket',
 });
 connectionGini.connect(err => {
   if (err) {
-    console.log('MYSQL(greenmarket) 연결 실패 : ', err);
-    return;
+    console.error('MYSQL(greenmarket) 연결 실패:', err);
+  } else {
+    console.log('MYSQL(greenmarket) 연결 성공');
   }
-  console.log('MYSQL(greenmarket) 연결 성공');
 });
 
-/**
- * ======================================
- * 3. 기존 kdt 프로젝트용 라우트
- * ======================================
- */
+// ──────────────────────────────────────────────
+// 3. KDT 프로젝트용 라우트
 // 3-1. 로그인 (users 테이블)
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
@@ -511,29 +490,30 @@ app.get('/ginipet/join', (req, res) => {
   res.json('Excused from ginipet backend');
 });
 
-/**
- * ======================================
- * 5. GreenMarket 전용 라우트
- * ======================================
- */
-// JWT 인증 미들웨어
+
+// ──────────────────────────────────────────────
+// JWT 인증 미들웨어 (GreenMarket 전용)
 function authenticateToken(req, res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = authHeader?.split(' ')[1];
   if (!token) return res.status(401).json({ message: '토큰 없음' });
-  jwt.verify(token, SECRET_KEY, (err, user) => {
+  jwt.verify(token, SECRET, (err, user) => {
     if (err) return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
     req.user = user;
     next();
   });
 }
 
-// • 상품 등록 (이미지 + 데이터)
+// ──────────────────────────────────────────────
+// 4. GreenMarket 전용 라우트
+
+// 상품 등록 (이미지 + 데이터)
 app.post('/products', authenticateToken, upload, (req, res) => {
   const b = req.body;
-  const img = key => req.files?.[key]?.[0]?.filename ?? null;
+  const img = key => req.files?.[key]?.[0]?.filename || null;
   const owner_id = req.user.id;
   const shipping = b.shipping_fee ? Number(b.shipping_fee) : 0;
+
   const params = [
     owner_id,
     b.title, b.brand, b.kind, b.condition,
@@ -543,6 +523,7 @@ app.post('/products', authenticateToken, upload, (req, res) => {
     img('image_1'), img('image_2'), img('image_3'),
     img('image_4'), img('image_5'), img('image_6'),
   ];
+
   const sql = `
     INSERT INTO green_products
       (owner_id, title, brand, kind, \`condition\`, price,
@@ -550,21 +531,27 @@ app.post('/products', authenticateToken, upload, (req, res) => {
        image_main, image_1, image_2, image_3, image_4, image_5, image_6)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
-  connectionKdt.query(sql, params, (err, result) => {
+
+  // ← connectionGini 로 변경!
+  connectionGini.query(sql, params, (err, result) => {
     if (err) {
-      console.error('INSERT ERROR:', err);
+      console.error('GreenMarket INSERT ERROR:', err);
       return res.status(500).json({ error: '상품 등록 실패' });
     }
     res.json({ success: true, id: result.insertId });
   });
 });
 
-// • 상품 목록 조회
+// 상품 목록 조회
 app.get('/products', (req, res) => {
-  connectionKdt.query(
+  // ← 역시 connectionGini
+  connectionGini.query(
     'SELECT * FROM green_products ORDER BY id DESC',
     (err, rows) => {
-      if (err) return res.status(500).json({ error: '조회 실패' });
+      if (err) {
+        console.error('GreenMarket SELECT ERROR:', err);
+        return res.status(500).json({ error: '조회 실패' });
+      }
       const products = rows.map(r => ({
         id: r.id,
         title: r.title,
@@ -586,7 +573,7 @@ app.get('/products', (req, res) => {
   );
 });
 
-// • 상품 상세 조회
+// 상품 상세 조회
 app.get('/products/:id', (req, res) => {
   const sql = `
     SELECT
@@ -597,26 +584,27 @@ app.get('/products/:id', (req, res) => {
     JOIN green_users u ON p.owner_id = u.id
     WHERE p.id = ?
   `;
-  connectionKdt.query(sql, [req.params.id], (err, result) => {
+  connectionGini.query(sql, [req.params.id], (err, result) => {
     if (err)   return res.status(500).json({ error: 'DB 오류' });
     if (!result.length) return res.status(404).json({ error: '상품 없음' });
     res.json(result[0]);
   });
 });
 
-// • 장바구니 조회
+// 장바구니 조회
 app.get('/cart', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ message: '토큰 없음' });
+
   try {
-    const user = jwt.verify(token, SECRET_KEY);
+    const user = jwt.verify(token, SECRET);
     const sql  = `
       SELECT cart_id AS id, product_id, title, brand, kind,
              \`condition\`, price, shipping_fee, trade_type,
              region, image_main, added_at
       FROM green_cart WHERE user_id = ?
     `;
-    connectionKdt.query(sql, [user.id], (err, rows) => {
+    connectionGini.query(sql, [user.id], (err, rows) => {
       if (err) return res.status(500).json({ message: 'DB 오류' });
       res.json(rows);
     });
@@ -625,25 +613,29 @@ app.get('/cart', (req, res) => {
   }
 });
 
-// • 장바구니 추가
+// 장바구니 추가
 app.post('/cart', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ message: '토큰 없음' });
+
   try {
-    const user = jwt.verify(token, SECRET_KEY);
+    const user = jwt.verify(token, SECRET);
     const { product_id } = req.body;
     const checkSql = 'SELECT * FROM green_cart WHERE user_id = ? AND product_id = ?';
-    connectionKdt.query(checkSql, [user.id, product_id], (chkErr, chkRes) => {
+
+    connectionGini.query(checkSql, [user.id, product_id], (chkErr, chkRes) => {
       if (chkErr) return res.status(500).json({ message: 'DB 오류' });
       if (chkRes.length) return res.status(400).json({ message: '이미 장바구니에 있습니다.' });
+
       const prodSql = `
         SELECT title, brand, kind, \`condition\`, price,
                trade_type, region, image_main, shipping_fee
         FROM green_products WHERE id = ?
       `;
-      connectionKdt.query(prodSql, [product_id], (pErr, pRes) => {
+      connectionGini.query(prodSql, [product_id], (pErr, pRes) => {
         if (pErr) return res.status(500).json({ message: '상품 조회 오류' });
         if (!pRes.length) return res.status(404).json({ message: '상품 없음' });
+
         const p = pRes[0];
         const insSql = `
           INSERT INTO green_cart
@@ -655,7 +647,8 @@ app.post('/cart', (req, res) => {
           user.id, product_id, p.title, p.brand, p.kind, p.condition,
           p.shipping_fee, p.price, p.trade_type, p.region, p.image_main
         ];
-        connectionKdt.query(insSql, params2, err => {
+
+        connectionGini.query(insSql, params2, err => {
           if (err) return res.status(500).json({ message: '장바구니 추가 실패' });
           res.json({ message: '장바구니에 상품이 추가되었습니다.' });
         });
@@ -666,12 +659,8 @@ app.post('/cart', (req, res) => {
   }
 });
 
-/**
- * ======================================
- * 6. 서버 실행
- * ======================================
- */
+// ──────────────────────────────────────────────
+// 5. 서버 실행
 app.listen(port, () => {
-  console.log('Listening...');
-  console.log('▶ kdt 백엔드 & ginipet 백엔드 & greenmarket 백엔드 통합 실행 중');
+  console.log(`▶ 서버 실행 중 (port: ${port})`);
 });
