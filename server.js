@@ -459,53 +459,54 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// 회원정보 수정
-app.put('/member/update/:id', async(req, res) => {
-  const {username, password, phone, email, region} = req.body
-  const {id} = req.params;
+// 회원정보 수정 (PUT /api/member/update/:id)
+app.put('/api/member/update/:id', async (req, res) => {
+  const { username, password, phone, email, region } = req.body;
+  const { id } = req.params;
 
-  try {
-    let hash;
-    if(password) {
-      hash = await bcrypt.hash(password, 10);
-    } //해시 암호화(다시 지정), 비밀번호 있을 때만 처리
+  try {
+    let hash = null;
+    if (password) {
+      hash = await bcrypt.hash(password, 10);
+    }
 
-    const query = 'UPDATE green_users SET username = ?, password = ?, phone = ?, email = ?, region = ? WHERE id = ?';
-    const values = [username, hash, phone, email, region, id];
-   
-    connection.query(query, values, (err) => {
-      if(err) {
-        console.log('수정 오류 : ', err);
-        res.status(500).json({error: '수정 실패'});
-        return;
-      }
-      res.json({success: true});
-    });
-  } catch(error) {
-    console.error('회원가입 오류:', error);
-    res.status(500).json({ success: false, message: '서버 오류' });
-  }
+    const query = 
+      'UPDATE green_users ' +
+      'SET username = ?, password = COALESCE(?, password), phone = ?, email = ?, region = ? ' +
+      'WHERE id = ?';
+    const values = [username, hash, phone, email, region, id];
+
+    connectionGM.query(query, values, (err) => {
+      if (err) {
+        console.error('수정 오류:', err);
+        return res.status(500).json({ error: '수정 실패' });
+      }
+      res.json({ success: true });
+    });
+  } catch (error) {
+    console.error('서버 오류:', error);
+    res.status(500).json({ success: false, message: '서버 오류' });
+  }
 });
 
-// 회원정보 수정을 위한 특정 조회
-app.get('/member/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10); //숫자형 변환
+// 회원정보 조회 (GET /api/member/:id)
+app.get('/api/member/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const sql = 
+    'SELECT id, userid, username, phone, email, region, last_login ' +
+    'FROM green_users WHERE id = ?';
 
-  // 비밀번호 제외하고 불러오기
-  connection.query('SELECT id, username, userid, phone, email, region FROM green_users WHERE id = ?', [id], (err, results) => {
-    if (err) {
-      console.log('조회 오류 : ', err);
-      res.status(500).json({error: '조회 실패'});
-      return;
-    }
-    if (results.length === 0) {
-      res.status(404).json({error: '해당 정보가 없습니다.'});
-      return;
-    }
-    res.json(results[0]); // 단일 객체만 반환
-  });
+  connectionGM.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error('조회 오류:', err);
+      return res.status(500).json({ error: '조회 실패' });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ error: '해당 정보가 없습니다.' });
+    }
+    res.json(results[0]);
+  });
 });
-
 
 // 5-2. 로그인 (관리자 판별 포함)
 // — 관리자 권한 포함 로그인 (/api/login) 핸들러 내
