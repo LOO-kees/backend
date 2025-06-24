@@ -641,19 +641,21 @@ app.delete('/greenmarket/cart', authenticateToken, (req, res) => {
 // 5-8. 장바구니 추가
 app.post('/greenmarket/cart', authenticateToken, (req, res) => {
   const { product_id } = req.body;
-  // kind 컬럼도 함께 조회
+  // kind와 condition까지 백틱으로 감싸서 조회
   const productSql =
     'SELECT title, brand, kind, `condition`, price, trade_type, region, image_main, shipping_fee ' +
     'FROM green_products WHERE id = ?';
   connectionGM.query(productSql, [product_id], (err, pRows) => {
     if (err) return res.status(500).json({ error: '상품 조회 오류' });
     if (!pRows.length) return res.status(404).json({ error: '상품 없음' });
+
     const product = pRows[0];
     const checkSql = 'SELECT * FROM green_cart WHERE user_id = ? AND product_id = ?';
     connectionGM.query(checkSql, [req.user.id, product_id], (cErr, cRows) => {
       if (cErr) return res.status(500).json({ error: 'DB 오류' });
       if (cRows.length) return res.status(400).json({ error: '이미 장바구니에 있음' });
-      // INSERT 시 kind 컬럼 포함
+
+      // INSERT 시에도 condition을 백틱으로 감싸야 합니다
       const insertSql =
         'INSERT INTO green_cart ' +
         '(user_id, product_id, title, brand, kind, `condition`, price, shipping_fee, trade_type, region, image_main, added_at) ' +
@@ -671,6 +673,7 @@ app.post('/greenmarket/cart', authenticateToken, (req, res) => {
         product.region,
         product.image_main
       ];
+
       connectionGM.query(insertSql, params, iErr => {
         if (iErr) {
           console.error('장바구니 추가 오류:', iErr);
@@ -681,6 +684,7 @@ app.post('/greenmarket/cart', authenticateToken, (req, res) => {
     });
   });
 });
+
 
 
 // — 공지사항 API (green_notice) 전체 CRUD
