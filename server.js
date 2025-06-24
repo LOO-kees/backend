@@ -641,8 +641,9 @@ app.delete('/greenmarket/cart', authenticateToken, (req, res) => {
 // 5-8. 장바구니 추가
 app.post('/greenmarket/cart', authenticateToken, (req, res) => {
   const { product_id } = req.body;
+  // kind 컬럼도 함께 조회
   const productSql =
-    'SELECT title, brand, `condition`, price, trade_type, region, image_main, shipping_fee ' +
+    'SELECT title, brand, kind, `condition`, price, trade_type, region, image_main, shipping_fee ' +
     'FROM green_products WHERE id = ?';
   connectionGM.query(productSql, [product_id], (err, pRows) => {
     if (err) return res.status(500).json({ error: '상품 조회 오류' });
@@ -651,22 +652,36 @@ app.post('/greenmarket/cart', authenticateToken, (req, res) => {
     const checkSql = 'SELECT * FROM green_cart WHERE user_id = ? AND product_id = ?';
     connectionGM.query(checkSql, [req.user.id, product_id], (cErr, cRows) => {
       if (cErr) return res.status(500).json({ error: 'DB 오류' });
-      if (cRows.length) return res.status(400).json({ error: '이미 장바구니에 있음' });  
+      if (cRows.length) return res.status(400).json({ error: '이미 장바구니에 있음' });
+      // INSERT 시 kind 컬럼 포함
       const insertSql =
-        'INSERT INTO green_cart (user_id, product_id, title, brand, `condition`, shipping_fee, price, trade_type, region, image_main, added_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())';
+        'INSERT INTO green_cart ' +
+        '(user_id, product_id, title, brand, kind, `condition`, price, shipping_fee, trade_type, region, image_main, added_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())';
       const params = [
-        req.user.id, product_id, product.title, product.brand,
-        product.condition, product.shipping_fee, product.price,
-        product.trade_type, product.region, product.image_main
+        req.user.id,
+        product_id,
+        product.title,
+        product.brand,
+        product.kind,
+        product.condition,
+        product.price,
+        product.shipping_fee,
+        product.trade_type,
+        product.region,
+        product.image_main
       ];
       connectionGM.query(insertSql, params, iErr => {
-        if (iErr) return res.status(500).json({ error: '추가 실패' });
+        if (iErr) {
+          console.error('장바구니 추가 오류:', iErr);
+          return res.status(500).json({ error: '장바구니 추가 실패' });
+        }
         res.json({ success: true, message: '장바구니에 상품이 추가되었습니다.' });
       });
     });
   });
 });
+
 
 // — 공지사항 API (green_notice) 전체 CRUD
 //  • 목록 조회
