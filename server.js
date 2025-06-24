@@ -434,13 +434,14 @@ app.get('/ginipet/join', (req, res) => {
   res.json('Excused from ginipet backend');
 });
 
-/**
+/** 
  * ================================================
  * 5. GreenMarket 전용 라우트 + 관리자 권한 판별
  * ================================================
  */
+
 // 5-1. 회원가입 (green_users 테이블)
-app.post('/api/register', async (req, res) => {
+app.post('/greenmarket/register', async (req, res) => {
   const { userid, username, password, phone, email, region } = req.body;
   try {
     const hash = await bcrypt.hash(password, 10);
@@ -459,8 +460,8 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// 회원정보 수정 (PUT /api/member/update/:id)
-app.put('/api/member/update/:id', async (req, res) => {
+// 5-1-2. 회원정보 수정 (PUT /greenmarket/member/update/:id)
+app.put('/greenmarket/member/update/:id', async (req, res) => {
   const { username, password, phone, email, region } = req.body;
   const { id } = req.params;
 
@@ -470,13 +471,13 @@ app.put('/api/member/update/:id', async (req, res) => {
       hash = await bcrypt.hash(password, 10);
     }
 
-    const query = 
+    const query =
       'UPDATE green_users ' +
       'SET username = ?, password = COALESCE(?, password), phone = ?, email = ?, region = ? ' +
       'WHERE id = ?';
     const values = [username, hash, phone, email, region, id];
 
-    connectionGM.query(query, values, (err) => {
+    connectionGM.query(query, values, err => {
       if (err) {
         console.error('수정 오류:', err);
         return res.status(500).json({ error: '수정 실패' });
@@ -489,10 +490,10 @@ app.put('/api/member/update/:id', async (req, res) => {
   }
 });
 
-// 회원정보 조회 (GET /api/member/:id)
-app.get('/api/member/:id', (req, res) => {
+// 5-1-3. 회원정보 조회 (GET /greenmarket/member/:id)
+app.get('/greenmarket/member/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const sql = 
+  const sql =
     'SELECT id, userid, username, phone, email, region, last_login ' +
     'FROM green_users WHERE id = ?';
 
@@ -509,37 +510,35 @@ app.get('/api/member/:id', (req, res) => {
 });
 
 // 5-2. 로그인 (관리자 판별 포함)
-// — 관리자 권한 포함 로그인 (/api/login) 핸들러 내
-app.post('/api/login', (req, res) => {
+app.post('/greenmarket/login', (req, res) => {
   const { userid, password } = req.body;
   connectionGM.query(
     'SELECT * FROM green_users WHERE userid = ?',
     [userid],
     async (err, results) => {
       if (err) return res.status(500).json({ error: 'DB 오류' });
-      if (!results.length) return res.status(400).json({ error: '아이디 또는 비밀번호가 잘못되었습니다.' });
+      if (!results.length)
+        return res.status(400).json({ error: '아이디 또는 비밀번호가 잘못되었습니다.' });
+
       const user = results[0];
       const match = await bcrypt.compare(password, user.password);
-      if (!match) return res.status(401).json({ error: '아이디 또는 비밀번호가 잘못되었습니다.' });
+      if (!match)
+        return res.status(401).json({ error: '아이디 또는 비밀번호가 잘못되었습니다.' });
 
       // last_login 업데이트
       const now = new Date();
       connectionGM.query('UPDATE green_users SET last_login = ? WHERE id = ?', [now, user.id]);
 
       // 관리자 여부 판별
-      const role = user.userid === 'admin' ? 'admin' : 'user';  // userid가 'admin'일 때만 관리자
+      const role = user.userid === 'admin' ? 'admin' : 'user';
 
-      // 토큰 페이로드 설정
-      const payload = {
-        id:       user.id,
-        username: user.username,
-        role
-      };
+      // 토큰 생성
+      const token = jwt.sign(
+        { id: user.id, username: user.username, role },
+        SECRET_KEY,
+        { expiresIn: '1h' }
+      );
 
-      // 1시간 유효 토큰 생성
-      const token = jwt.sign(payload, SECRET_KEY, { expiresIn: '1h' });
-
-      // 토큰 및 유저 정보 반환
       res.json({
         success: true,
         token,
@@ -550,8 +549,8 @@ app.post('/api/login', (req, res) => {
 });
 
 // 5-3. 상품 등록 (green_products + 이미지)
-app.post('/api/products', authenticateToken, upload, (req, res) => {
-  const b   = req.body;
+app.post('/greenmarket/products', authenticateToken, upload, (req, res) => {
+  const b = req.body;
   const img = key => req.files?.[key]?.[0]?.filename ?? null;
   const params = [
     req.user.id,
@@ -577,28 +576,31 @@ app.post('/api/products', authenticateToken, upload, (req, res) => {
 });
 
 // 5-4. 상품 목록 조회
-app.get('/api/products', (req, res) => {
-  connectionGM.query('SELECT * FROM green_products ORDER BY id DESC', (err, rows) => {
-    if (err) return res.status(500).json({ error: '조회 실패' });
-    const products = rows.map(r => ({
-      id:        r.id,
-      title:     r.title,
-      brand:     r.brand,
-      kind:      r.kind,
-      condition: r.condition,
-      price:     r.price,
-      trade_type: r.trade_type,
-      region:    r.region,
-      description: r.description,
-      datetime:  r.datetime,
-      images: [r.image_main, r.image_1, r.image_2, r.image_3, r.image_4, r.image_5, r.image_6].filter(v => v)
-    }));
-    res.json(products);
-  });
+app.get('/greenmarket/products', (req, res) => {
+  connectionGM.query(
+    'SELECT * FROM green_products ORDER BY id DESC',
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: '조회 실패' });
+      const products = rows.map(r => ({
+        id:         r.id,
+        title:      r.title,
+        brand:      r.brand,
+        kind:       r.kind,
+        condition:  r.condition,
+        price:      r.price,
+        trade_type: r.trade_type,
+        region:     r.region,
+        description:r.description,
+        datetime:   r.datetime,
+        images:     [r.image_main, r.image_1, r.image_2, r.image_3, r.image_4, r.image_5, r.image_6].filter(v => v)
+      }));
+      res.json(products);
+    }
+  );
 });
 
 // 5-5. 상품 상세 조회
-app.get('/api/products/:id', (req, res) => {
+app.get('/greenmarket/products/:id', (req, res) => {
   const sql =
     'SELECT p.*, u.username AS seller_name, ' +
     '(SELECT COUNT(*) FROM green_products WHERE owner_id = p.owner_id) AS seller_product_count ' +
@@ -613,7 +615,7 @@ app.get('/api/products/:id', (req, res) => {
 });
 
 // 5-6. 장바구니 조회
-app.get('/api/cart', authenticateToken, (req, res) => {
+app.get('/greenmarket/cart', authenticateToken, (req, res) => {
   const sql =
     'SELECT cart_id AS id, product_id, title, brand, `condition`, price, shipping_fee, trade_type, region, image_main, added_at ' +
     'FROM green_cart WHERE user_id = ?';
@@ -624,9 +626,10 @@ app.get('/api/cart', authenticateToken, (req, res) => {
 });
 
 // 5-7. 장바구니 삭제
-app.delete('/api/cart', authenticateToken, (req, res) => {
+app.delete('/greenmarket/cart', authenticateToken, (req, res) => {
   const ids = req.body.ids;
-  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: '삭제할 ID 필요' });
+  if (!Array.isArray(ids) || !ids.length)
+    return res.status(400).json({ error: '삭제할 ID 필요' });
   const placeholders = ids.map(() => '?').join(',');
   const sql = `DELETE FROM green_cart WHERE user_id = ? AND cart_id IN (${placeholders})`;
   connectionGM.query(sql, [req.user.id, ...ids], (err, result) => {
@@ -636,7 +639,7 @@ app.delete('/api/cart', authenticateToken, (req, res) => {
 });
 
 // 5-8. 장바구니 추가
-app.post('/api/cart', authenticateToken, (req, res) => {
+app.post('/greenmarket/cart', authenticateToken, (req, res) => {
   const { product_id } = req.body;
   const productSql =
     'SELECT title, brand, `condition`, price, trade_type, region, image_main, shipping_fee ' +
@@ -648,7 +651,7 @@ app.post('/api/cart', authenticateToken, (req, res) => {
     const checkSql = 'SELECT * FROM green_cart WHERE user_id = ? AND product_id = ?';
     connectionGM.query(checkSql, [req.user.id, product_id], (cErr, cRows) => {
       if (cErr) return res.status(500).json({ error: 'DB 오류' });
-      if (cRows.length) return res.status(400).json({ error: '이미 장바구니에 있음' });
+      if (cRows.length) return res.status(400).json({ error: '이미 장바구니에 있음' });  
       const insertSql =
         'INSERT INTO green_cart (user_id, product_id, title, brand, `condition`, shipping_fee, price, trade_type, region, image_main, added_at) ' +
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())';
@@ -665,11 +668,9 @@ app.post('/api/cart', authenticateToken, (req, res) => {
   });
 });
 
-
-
 // — 공지사항 API (green_notice) 전체 CRUD
-// 목록 조회
-app.get('/notice', (req, res) => {
+//  • 목록 조회
+app.get('/greenmarket/notice', (req, res) => {
   connectionGM.query(
     'SELECT * FROM green_notice ORDER BY id DESC',
     (err, rows) => {
@@ -678,9 +679,8 @@ app.get('/notice', (req, res) => {
     }
   );
 });
-
-// 상세 조회
-app.get('/notice/:id', (req, res) => {
+//  • 상세 조회
+app.get('/greenmarket/notice/:id', (req, res) => {
   const { id } = req.params;
   connectionGM.query(
     'SELECT * FROM green_notice WHERE id = ?',
@@ -692,9 +692,8 @@ app.get('/notice/:id', (req, res) => {
     }
   );
 });
-
-// 등록
-app.post('/notice', (req, res) => {
+//  • 등록
+app.post('/greenmarket/notice', (req, res) => {
   const { category, title, writer, content } = req.body;
   connectionGM.query(
     'INSERT INTO green_notice (category, title, writer, content) VALUES (?, ?, ?, ?)',
@@ -705,9 +704,8 @@ app.post('/notice', (req, res) => {
     }
   );
 });
-
-// 수정
-app.put('/notice/update/:id', (req, res) => {
+//  • 수정
+app.put('/greenmarket/notice/update/:id', (req, res) => {
   const { id } = req.params;
   const { category, title, content } = req.body;
   connectionGM.query(
@@ -719,9 +717,8 @@ app.put('/notice/update/:id', (req, res) => {
     }
   );
 });
-
-// 삭제
-app.delete('/notice/:id', (req, res) => {
+//  • 삭제
+app.delete('/greenmarket/notice/:id', (req, res) => {
   const { id } = req.params;
   connectionGM.query(
     'DELETE FROM green_notice WHERE id = ?',
