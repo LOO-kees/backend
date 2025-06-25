@@ -575,28 +575,38 @@ app.post('/greenmarket/products', authenticateToken, upload, (req, res) => {
   });
 });
 
-// 5-4. 상품 목록 조회
+// 5-4. 상품 목록 조회 (검색어가 있으면 title/brand/kind LIKE 필터 추가)
 app.get('/greenmarket/products', (req, res) => {
-  connectionGM.query(
-    'SELECT * FROM green_products ORDER BY id DESC',
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: '조회 실패' });
-      const products = rows.map(r => ({
-        id:         r.id,
-        title:      r.title,
-        brand:      r.brand,
-        kind:       r.kind,
-        condition:  r.condition,
-        price:      r.price,
-        trade_type: r.trade_type,
-        region:     r.region,
-        description:r.description,
-        datetime:   r.datetime,
-        images:     [r.image_main, r.image_1, r.image_2, r.image_3, r.image_4, r.image_5, r.image_6].filter(v => v)
-      }));
-      res.json(products);
-    }
-  );
+  const keyword = req.query.keyword;
+  let sql = 'SELECT * FROM green_products';
+  const params = [];
+
+  if (keyword) {
+    sql += ' WHERE title LIKE ? OR brand LIKE ? OR kind LIKE ?';
+    params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+  }
+
+  sql += ' ORDER BY id DESC';
+  connectionGM.query(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: '조회 실패' });
+    const products = rows.map(r => ({
+      id:         r.id,
+      title:      r.title,
+      brand:      r.brand,
+      kind:       r.kind,
+      condition:  r.condition,
+      price:      r.price,
+      trade_type: r.trade_type,
+      region:     r.region,
+      description:r.description,
+      datetime:   r.datetime,
+      images:     [
+        r.image_main, r.image_1, r.image_2,
+        r.image_3, r.image_4, r.image_5, r.image_6
+      ].filter(v => v)
+    }));
+    res.json(products);
+  });
 });
 
 // 5-5. 상품 상세 조회
