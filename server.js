@@ -548,7 +548,7 @@ app.post('/greenmarket/login', (req, res) => {
   );
 });
 
-// 5-3. 상품 등록 (green_products + 이미지)
+// 5-3. 상품 등록
 app.post('/greenmarket/products', authenticateToken, upload, (req, res) => {
   const b = req.body;
   const img = key => req.files?.[key]?.[0]?.filename ?? null;
@@ -575,17 +575,18 @@ app.post('/greenmarket/products', authenticateToken, upload, (req, res) => {
   });
 });
 
-// 5-4. 상품 목록 조회 (검색어가 있으면 title/brand/kind LIKE 필터 추가)
+// 5-4. 상품 목록 조회 (검색·주인·제외·카테고리 필터 추가)
 app.get('/greenmarket/products', (req, res) => {
-  const keyword = req.query.keyword;
-  let sql = 'SELECT * FROM green_products';
+  const { keyword, owner_id, exclude_id, category } = req.query;
+  let sql = 'SELECT * FROM green_products WHERE 1=1';
   const params = [];
-
-  if (keyword) {
-    sql += ' WHERE title LIKE ? OR brand LIKE ? OR kind LIKE ?';
+  if (owner_id)   { sql += ' AND owner_id = ?';    params.push(owner_id); }
+  if (exclude_id) { sql += ' AND id <> ?';          params.push(exclude_id); }
+  if (category)   { sql += ' AND kind = ?';         params.push(category); }
+  if (keyword)    {
+    sql += ' AND (title LIKE ? OR brand LIKE ? OR kind LIKE ?)';
     params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
   }
-
   sql += ' ORDER BY id DESC';
   connectionGM.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: '조회 실패' });
@@ -624,7 +625,54 @@ app.get('/greenmarket/products/:id', (req, res) => {
   });
 });
 
-// 5-6. 장바구니 조회
+// 5-6. 상품 수정 (주인 확인 & 이미지 업데이트)
+app.post('/greenmarket/products/edit/:id', authenticateToken, upload, (req, res) => {
+  const pid = req.params.id;
+  connectionGM.query('SELECT owner_id FROM green_products WHERE id = ?', [pid], (e, rows) => {
+    if (e) return res.status(500).json({ error: 'DB 오류' });
+    if (!rows.length) return res.status(404).json({ error: '상품 없음' });
+    if (rows[0].owner_id !== req.user.id) return res.status(403).json({ error: '권한 없음' });
+
+    const b   = req.body;
+    const img = key => req.files?.[key]?.[0]?.filename ?? null;
+    const params = [
+      b.title, b.brand, b.kind, b.condition, b.price,
+      b.trade_type, b.region, b.description, b.shipping_fee,
+      img('image_main'), img('image_1'), img('image_2'),
+      img('image_3'), img('image_4'), img('image_5'),
+      img('image_6'), pid
+    ];
+    const sql = `
+      UPDATE green_products SET
+        title=?, brand=?, kind=?, \`condition\`=?, price=?,
+        trade_type=?, region=?, description=?, shipping_fee=?,
+        image_main=COALESCE(?,image_main),
+        image_1=COALESCE(?,image_1), image_2=COALESCE(?,image_2),
+        image_3=COALESCE(?,image_3), image_4=COALESCE(?,image_4),
+        image_5=COALESCE(?,image_5), image_6=COALESCE(?,image_6)
+      WHERE id=?`;
+    connectionGM.query(sql, params, err2 => {
+      if (err2) return res.status(500).json({ error: '수정 실패' });
+      res.json({ success: true });
+    });
+  });
+});
+
+// 5-7. 상품 삭제 (주인 확인)
+app.delete('/greenmarket/products/:id', authenticateToken, (req, res) => {
+  const pid = req.params.id;
+  connectionGM.query('SELECT owner_id FROM green_products WHERE id = ?', [pid], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'DB 오류' });
+    if (!rows.length) return res.status(404).json({ error: '상품 없음' });
+    if (rows[0].owner_id !== req.user.id) return res.status(403).json({ error: '권한 없음' });
+    connectionGM.query('DELETE FROM green_products WHERE id = ?', [pid], delErr => {
+      if (delErr) return res.status(500).json({ error: '삭제 실패' });
+      res.json({ success: true });
+    });
+  });
+});
+
+// 5-8. 장바구니 조회
 app.get('/greenmarket/cart', authenticateToken, (req, res) => {
   const sql =
     'SELECT cart_id AS id, product_id, title, brand, `condition`, price, shipping_fee, trade_type, region, image_main, added_at ' +
@@ -635,11 +683,10 @@ app.get('/greenmarket/cart', authenticateToken, (req, res) => {
   });
 });
 
-// 5-7. 장바구니 삭제
+// 5-9. 장바구니 삭제
 app.delete('/greenmarket/cart', authenticateToken, (req, res) => {
   const ids = req.body.ids;
-  if (!Array.isArray(ids) || !ids.length)
-    return res.status(400).json({ error: '삭제할 ID 필요' });
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: '삭제할 ID 필요' });
   const placeholders = ids.map(() => '?').join(',');
   const sql = `DELETE FROM green_cart WHERE user_id = ? AND cart_id IN (${placeholders})`;
   connectionGM.query(sql, [req.user.id, ...ids], (err, result) => {
@@ -648,24 +695,20 @@ app.delete('/greenmarket/cart', authenticateToken, (req, res) => {
   });
 });
 
-// 5-8. 장바구니 추가
+// 5-10. 장바구니 추가
 app.post('/greenmarket/cart', authenticateToken, (req, res) => {
   const { product_id } = req.body;
-  // kind와 condition까지 백틱으로 감싸서 조회
   const productSql =
     'SELECT title, brand, kind, `condition`, price, trade_type, region, image_main, shipping_fee ' +
     'FROM green_products WHERE id = ?';
   connectionGM.query(productSql, [product_id], (err, pRows) => {
     if (err) return res.status(500).json({ error: '상품 조회 오류' });
     if (!pRows.length) return res.status(404).json({ error: '상품 없음' });
-
     const product = pRows[0];
     const checkSql = 'SELECT * FROM green_cart WHERE user_id = ? AND product_id = ?';
     connectionGM.query(checkSql, [req.user.id, product_id], (cErr, cRows) => {
       if (cErr) return res.status(500).json({ error: 'DB 오류' });
       if (cRows.length) return res.status(400).json({ error: '이미 장바구니에 있음' });
-
-      // INSERT 시에도 condition을 백틱으로 감싸야 합니다
       const insertSql =
         'INSERT INTO green_cart ' +
         '(user_id, product_id, title, brand, kind, `condition`, price, shipping_fee, trade_type, region, image_main, added_at) ' +
@@ -683,12 +726,8 @@ app.post('/greenmarket/cart', authenticateToken, (req, res) => {
         product.region,
         product.image_main
       ];
-
       connectionGM.query(insertSql, params, iErr => {
-        if (iErr) {
-          console.error('장바구니 추가 오류:', iErr);
-          return res.status(500).json({ error: '장바구니 추가 실패' });
-        }
+        if (iErr) return res.status(500).json({ error: '장바구니 추가 실패' });
         res.json({ success: true, message: '장바구니에 상품이 추가되었습니다.' });
       });
     });
