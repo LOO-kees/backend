@@ -5,14 +5,13 @@
  */
 const express    = require('express');      // Express 기본 라우팅
 const app        = express();               // Express 인스턴스 생성
-const port       = 9070;                    // 사용할 포트 (kdt/지니펫/greenmarket 공통)
+const port       = 9070;                    // 사용할 포트
 const cors       = require('cors');         // CORS 허용 미들웨어
 const mysql      = require('mysql');        // MySQL 연결 라이브러리
 const bcrypt     = require('bcrypt');       // bcrypt 해시 암호화
 const jwt        = require('jsonwebtoken'); // JWT 생성/검증
 const SECRET_KEY = 'test';                  // JWT 서명용 비밀 키 (예시)
 
-// 모든 도메인에서의 요청 허용 및 JSON 파싱
 app.use(cors());
 app.use(express.json());
 
@@ -45,13 +44,14 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage }).fields([
   { name: 'image_main', maxCount: 1 },
-  { name: 'image_1',      maxCount: 1 },
-  { name: 'image_2',      maxCount: 1 },
-  { name: 'image_3',      maxCount: 1 },
-  { name: 'image_4',      maxCount: 1 },
-  { name: 'image_5',      maxCount: 1 },
-  { name: 'image_6',      maxCount: 1 },
+  { name: 'image_1',    maxCount: 1 },
+  { name: 'image_2',    maxCount: 1 },
+  { name: 'image_3',    maxCount: 1 },
+  { name: 'image_4',    maxCount: 1 },
+  { name: 'image_5',    maxCount: 1 },
+  { name: 'image_6',    maxCount: 1 },
 ]);
+
 
 /**
  * ======================================
@@ -733,7 +733,6 @@ app.post('/greenmarket/cart', authenticateToken, (req, res) => {
     });
   });
 });
-
 
 
 // — 공지사항 API (green_notice) 전체 CRUD
